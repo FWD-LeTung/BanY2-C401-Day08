@@ -265,11 +265,30 @@ def get_embedding(text: str) -> List[float]:
         model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
         return model.encode(text).tolist()
     """
-    raise NotImplementedError(
-        "TODO: Implement get_embedding().\n"
-        "Chọn Option A (OpenAI) hoặc Option B (Sentence Transformers) trong TODO comment."
-    )
 
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    
+    try: 
+        if provider == "openai":
+            from openai import OpenAI
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+            response = client.embeddings.create(
+                input=text,
+                modle = embedding_model
+            )
+
+            return response.data[0].embedding
+        elif provider == "local":
+            from sentence_transformers import SentenceTransformer
+            model_name = os.getenv("LOCAL_EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+            model = SentenceTransformer(model_name)
+
+            return model.encode(text).tolist()
+    except Exception as e:
+        print(f"Lỗi khi tạo embedding: {e}")
+        return []  # Trả về embedding rỗng nếu có lỗi
 
 def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None:
     """
