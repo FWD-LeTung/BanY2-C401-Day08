@@ -271,6 +271,7 @@ def get_embedding(text: str) -> List[float]:
     )
 
 
+
 def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None:
     """
     Pipeline hoàn chỉnh: đọc docs → preprocess → chunk → embed → store.
