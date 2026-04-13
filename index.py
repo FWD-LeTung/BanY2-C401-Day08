@@ -276,7 +276,7 @@ def get_embedding(text: str) -> List[float]:
 
             response = client.embeddings.create(
                 input=text,
-                modle = embedding_model
+                model = embedding_model
             )
 
             return response.data[0].embedding

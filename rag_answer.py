@@ -76,10 +76,39 @@ def retrieve_dense(query: str, top_k: int = TOP_K_SEARCH) -> List[Dict[str, Any]
         # Lưu ý: distances trong ChromaDB cosine = 1 - similarity
         # Score = 1 - distance
     """
-    raise NotImplementedError(
-        "TODO Sprint 2: Implement retrieve_dense().\n"
-        "Tham khảo comment trong hàm để biết cách query ChromaDB."
+    import chromadb
+    from index import get_embedding, CHROMA_DB_DIR
+    if not query or not query.strip():
+        return []
+    
+    client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
+    collection = client.get_collection("rag_lab")
+
+    query_embedding = get_embedding(query)
+
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k,
+        include = ["documents", "metadatas", "distances"]
     )
+
+    documents = results.get("documents", [[]])[0]
+    metadatas = results.get("metadatas", [[]])[0]
+    distances = results.get("distances", [[]])[0]
+
+    output = []
+
+    for doc, meta, dist in zip(documents, metadatas, distances):
+
+        score = 1 - dist
+        output.append({
+            "text": doc,
+            "metadata": meta,
+            "score": score
+        })
+
+    output.sort(key=lambda x: x["score"], reverse=True)
+    return output[:top_k]
 
 
 # =============================================================================
