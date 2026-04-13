@@ -422,7 +422,8 @@ def list_chunks(db_dir: Path = CHROMA_DB_DIR, n: int = 5) -> None:
 
         print(f"\n--- Phân bố theo access level ---")
         for acc, count in sorted(access_levels.items(), key=lambda x: -x[1]):
-            print(f"  {acc}: {count} chunks
+            print(f"  {acc}: {count} chunks")
+    """
     TODO: Implement sau khi build_index() hoàn thành.
     """
     try:
