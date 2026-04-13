@@ -191,8 +191,30 @@ def retrieve_sparse(query: str, top_k: int = TOP_K_SEARCH) -> List[Dict[str, Any
 
     _load_bm25_from_chroma()
 
-    print("[retrieve_sparse] Chưa implement — Sprint 3")
-    return []
+    if not _bm25_docs:
+        return []
+    
+    q_tokens = _tokenize_vi_en(query)
+    if not q_tokens:
+        return []
+    
+    scores = _bm25_index.get_scores(q_tokens)
+
+    top_indices = sorted(
+        range(len(scores)),
+        key=lambda i: scores[i],
+        reverse=True
+    )[:top_k]
+
+    results: list[Dict[str, Any]] = []
+    for i in top_indices:
+        results.append({
+            "text": _bm25_docs[i],
+            "metadata": _bm25_meatas[i],
+            "score": scores[i]
+        })
+
+    return results
 
 
 # =============================================================================
@@ -229,9 +251,50 @@ def retrieve_hybrid(
     - Query như "Approval Matrix" khi doc đổi tên thành "Access Control SOP"
     """
     # TODO Sprint 3: Implement hybrid RRF
-    # Tạm thời fallback về dense
-    print("[retrieve_hybrid] Chưa implement RRF — fallback về dense")
-    return retrieve_dense(query, top_k)
+    
+    dense_results = retrieve_dense(query, top_k=top_k*2) 
+    sparse_results = retrieve_sparse(query, top_k=top_k*2)
+
+    if not dense_results and not sparse_results:
+         return sparse_results[:top_k]
+    if not sparse_results:
+        return dense_results[:top_k]
+    
+    def doc_key(item: Dict[str, Any]) -> str:
+        meta = item.get("metadata", {})
+        source = meta.get("source", "")
+        section = meta.get("section", "")
+        text = item.get("text", "")
+
+        return f"{source}|{section}|{hash(text)}"
+
+    dense_ranks = {doc_key(doc): rank for rank, doc in enumerate(dense_results)}
+    sparse_ranks = {doc_key(doc): rank for rank, doc in enumerate(sparse_results)}
+
+    merged_docs: Dict[str, Dict[str, Any]] = {}
+    for item in dense_results + sparse_results:
+        key = doc_key(item)
+        if key not in merged_docs:
+            merged_docs[key] = {
+                "text": item["text"],
+                "metadata": item.get("metadata", {}),
+                "score": 0.0
+            }
+
+    rrf_scores = 60.0
+    for key, item in merged_docs.items():
+        dense_rank = dense_ranks.get(key)
+        sparse_rank = sparse_ranks.get(key)
+
+        rrf_scores = 0.0
+        if dense_rank is not None:
+            rrf_scores += dense_weight * (1 / (60 + dense_rank))
+        if sparse_rank is not None:
+            rrf_scores += sparse_weight * (1 / (60 + sparse_rank))
+        item["score"] = rrf_scores
+
+    results = sorted(merged_docs.values(), key=lambda x: x["score"], reverse=True)
+    return results[:top_k]
 
 
 # =============================================================================
