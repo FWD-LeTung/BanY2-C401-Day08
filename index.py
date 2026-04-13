@@ -94,10 +94,16 @@ def preprocess_document(raw_text: str, filepath: str) -> Dict[str, Any]:
             content_lines.append(line)
 
     cleaned_text = "\n".join(content_lines)
-
-    # TODO: Thêm bước normalize text nếu cần
-    # Gợi ý: bỏ ký tự đặc biệt thừa, chuẩn hóa dấu câu
-    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text)  # max 2 dòng trống liên tiếp
+    # Normalize text: bỏ ký tự đặc biệt thừa, chuẩn hóa dấu câu
+    # Giảm số dòng trống liên tiếp xuống tối đa 2 dòng
+    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text)
+    # Loại bỏ khoảng trắng thừa (multiple spaces → single space)
+    cleaned_text = re.sub(r" {2,}", " ", cleaned_text)
+    # Chuẩn hóa khoảng trắng xung quanh dấu chấm câu
+    cleaned_text = re.sub(r"\s+([.,!?;:])", r"\1", cleaned_text)
+    # Xóa khoảng trắng dư thừa ở đầu/cuối mỗi dòng
+    cleaned_text = "\n".join(line.rstrip() for line in cleaned_text.split("\n"))
+    cleaned_text = cleaned_text.strip()
 
     return {
         "text": cleaned_text,
@@ -122,20 +128,19 @@ def chunk_document(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
           - "text": nội dung chunk
           - "metadata": metadata gốc + "section" của chunk đó
 
-    TODO Sprint 1:
+    Quy trình:
     1. Split theo heading "=== Section ... ===" hoặc "=== Phần ... ===" trước
     2. Nếu section quá dài (> CHUNK_SIZE * 4 ký tự), split tiếp theo paragraph
     3. Thêm overlap: lấy đoạn cuối của chunk trước vào đầu chunk tiếp theo
-    4. Mỗi chunk PHẢI giữ metadata đầy đủ từ tài liệu gốc
+    4. Mỗi chunk giữ metadata đầy đủ từ tài liệu gốc
 
-    Gợi ý: Ưu tiên cắt tại ranh giới tự nhiên (section, paragraph)
+    Ưu tiên: Cắt tại ranh giới tự nhiên (section, paragraph, câu)
     thay vì cắt theo token count cứng.
     """
     text = doc["text"]
     base_metadata = doc["metadata"].copy()
     chunks = []
 
-    # TODO: Implement chunking theo section heading
     # Bước 1: Split theo heading pattern "=== ... ==="
     sections = re.split(r"(===.*?===)", text)
 
@@ -153,7 +158,7 @@ def chunk_document(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
                 )
                 chunks.extend(section_chunks)
             # Bắt đầu section mới
-            current_section = part.strip("= ").strip()
+            current_section = part.strip("= \n")
             current_section_text = ""
         else:
             current_section_text += part
@@ -180,9 +185,8 @@ def _split_by_size(
     """
     Helper: Split text dài thành chunks với overlap.
 
-    TODO Sprint 1:
-    Hiện tại dùng split đơn giản theo ký tự.
-    Cải thiện: split theo paragraph (\n\n) trước, rồi mới ghép đến khi đủ size.
+    Cải thiện: split theo paragraph (\n\n) trước, rồi ghép đến khi đủ size.
+    Tìm ranh giới tự nhiên (dấu xuống dòng, dấu chấm) khi cắt chunk.
     """
     if len(text) <= chunk_chars:
         # Toàn bộ section vừa một chunk
@@ -191,26 +195,46 @@ def _split_by_size(
             "metadata": {**base_metadata, "section": section},
         }]
 
-    # TODO: Implement split theo paragraph với overlap
-    # Gợi ý:
-    # paragraphs = text.split("\n\n")
-    # Ghép paragraphs lại cho đến khi gần đủ chunk_chars
-    # Lấy overlap từ đoạn cuối chunk trước
+    # Split theo paragraph (\n\n)
+    paragraphs = text.split("\n\n")
     chunks = []
-    start = 0
-    while start < len(text):
-        end = min(start + chunk_chars, len(text))
-        chunk_text = text[start:end]
+    current_chunk = ""
+    overlap_buffer = ""  # Dùng để lưu overlap từ chunk trước
 
-        # TODO: Tìm ranh giới tự nhiên gần nhất (dấu xuống dòng, dấu chấm)
-        # thay vì cắt giữa câu
+    for para in paragraphs:
+        # Nếu thêm paragraph này vào sẽ vượt chunk_chars
+        if len(current_chunk) + len(para) + 2 > chunk_chars and current_chunk.strip():
+            # Lưu chunk hiện tại
+            chunks.append({
+                "text": (overlap_buffer + current_chunk).strip(),
+                "metadata": {**base_metadata, "section": section},
+            })
+            
+            # Chuẩn bị overlap: lấy phần cuối của chunk để làm ngữ cảnh cho chunk tiếp theo
+            # Tìm câu cuối cùng trong chunk để cắt một cách tự nhiên
+            sentences = re.split(r'(?<=[.!?])\s+', current_chunk)
+            if len(sentences) > 1:
+                # Lấy 1-2 câu cuối làm overlap
+                overlap_buffer = " ".join(sentences[-1:]) + "\n\n"
+            else:
+                # Nếu không có dấu câu, lấy 30% cuối của chunk
+                overlap_size = len(current_chunk) // 3
+                overlap_buffer = current_chunk[-overlap_size:].lstrip() + "\n\n"
+            
+            current_chunk = para
+        else:
+            # Thêm paragraph vào chunk hiện tại
+            if current_chunk:
+                current_chunk += "\n\n" + para
+            else:
+                current_chunk = para
 
+    # Lưu chunk cuối cùng
+    if current_chunk.strip():
         chunks.append({
-            "text": chunk_text,
+            "text": (overlap_buffer + current_chunk).strip(),
             "metadata": {**base_metadata, "section": section},
         })
-        # Overlap: lùi lại overlap_chars để chunk sau có ngữ cảnh từ chunk trước
-        start = end - overlap_chars
 
     return chunks
 
