@@ -369,61 +369,22 @@ def list_chunks(db_dir: Path = CHROMA_DB_DIR, n: int = 5) -> None:
             print(f"  Source: {meta.get('source', 'N/A')}")
             print(f"  Section: {meta.get('section', 'N/A')}")
             print(f"  Effective Date: {meta.get('effective_date', 'N/A')}")
-        all_meta = results["metadatas"]
-        total = len(all_meta)
-        print(f"\nTổng chunks: {total}")
+            print(f"  Text preview: {doc[:120]}...")
+            print()
+    except Exception as e:
+        print(f"Lỗi khi đọc index: {e}")
+        print("Hãy chạy build_index() trước.")
 
-        # 1. Kiểm tra source coverage
-        missing_source = [i for i, m in enumerate(all_meta) if not m.get("source")]
-        print(f"\n--- Source coverage ---")
-        print(f"  Chunks có source: {total - len(missing_source)}/{total}")
-        if missing_source:
-            print(f"  Chunks thiếu source (index): {missing_source}")
 
-        # 2. Phân bố theo department
-        departments: Dict[str, int] = {}
-        for meta in all_meta:
-            dept = meta.get("department", "unknown")
-            departments[dept] = departments.get(dept, 0) + 1
-
-        print(f"\n--- Phân bố theo department ---")
-        for dept, count in sorted(departments.items(), key=lambda x: -x[1]):
-            print(f"  {dept}: {count} chunks")
-
-        # 3. Kiểm tra effective_date
-        missing_date = []
-        for i, meta in enumerate(all_meta):
-            if meta.get("effective_date") in ("unknown", "", None):
-                missing_date.append((i, meta.get("source", "N/A")))
-
-        print(f"\n--- Effective date coverage ---")
-        print(f"  Chunks có effective_date: {total - len(missing_date)}/{total}")
-        if missing_date:
-            print(f"  Chunks thiếu effective_date ({len(missing_date)}):")
-            sources_missing = set(src for _, src in missing_date)
-            for src in sorted(sources_missing):
-                print(f"    - {src}")
-
-        # 4. Phân bố theo section
-        sections: Dict[str, int] = {}
-        for meta in all_meta:
-            sec = meta.get("section", "unknown")
-            sections[sec] = sections.get(sec, 0) + 1
-
-        print(f"\n--- Phân bố theo section ---")
-        for sec, count in sorted(sections.items(), key=lambda x: -x[1]):
-            print(f"  {sec}: {count} chunks")
-
-        # 5. Phân bố theo access level
-        access_levels: Dict[str, int] = {}
-        for meta in all_meta:
-            acc = meta.get("access", "unknown")
-            access_levels[acc] = access_levels.get(acc, 0) + 1
-
-        print(f"\n--- Phân bố theo access level ---")
-        for acc, count in sorted(access_levels.items(), key=lambda x: -x[1]):
-            print(f"  {acc}: {count} chunks")
+def inspect_metadata_coverage(db_dir: Path = CHROMA_DB_DIR) -> None:
     """
+    Kiểm tra phân phối metadata trong toàn bộ index.
+
+    Checklist Sprint 1:
+    - Mọi chunk đều có source?
+    - Có bao nhiêu chunk từ mỗi department?
+    - Chunk nào thiếu effective_date?
+
     TODO: Implement sau khi build_index() hoàn thành.
     """
     try:
@@ -451,7 +412,7 @@ def list_chunks(db_dir: Path = CHROMA_DB_DIR, n: int = 5) -> None:
 
     except Exception as e:
         print(f"Lỗi: {e}. Hãy chạy build_index() trước.")
-
+        
 
 # =============================================================================
 # MAIN
