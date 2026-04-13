@@ -22,6 +22,9 @@ Definition of Done Sprint 3:
 """
 
 import os
+import json
+import re
+import unicodedata
 from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 
@@ -236,6 +239,8 @@ def retrieve_hybrid(
 # Cross-encoder để chấm lại relevance sau search rộng
 # =============================================================================
 
+_rerank_model = None
+
 def rerank(
     query: str,
     candidates: List[Dict[str, Any]],
@@ -268,10 +273,28 @@ def rerank(
     """
     # TODO Sprint 3: Implement rerank
     # Tạm thời trả về top_k đầu tiên (không rerank)
+    global _rerank_model
 
+    if not candidates:
+        return []
+    
+    if _rerank_model is None:
+        from sentence_transformers import CrossEncoder
+        _rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
+    pairs = [[query, chunk["text"]] for chunk in candidates]
+    scores = _rerank_model.predict(pairs)
 
-    return candidates[:top_k]
+    for i, score in enumerate(scores):
+        candidates[i]["score"] = float(score)
+
+    ranked_candidates = sorted(
+        zip(candidates, scores),
+        key=lambda x: x[1],
+        reverse=True
+    )
+    final_selection = [chunk for chunk, score in ranked_candidates[:top_k]]
+    return final_selection
 
 
 # =============================================================================
@@ -279,34 +302,166 @@ def rerank(
 # =============================================================================
 
 def transform_query(query: str, strategy: str = "expansion") -> List[str]:
-    """
-    Biến đổi query để tăng recall.
+    """Biến đổi query để tăng recall (Sprint 3 — Query Transform variant).
+
+    Trả về danh sách query/biến thể để đưa vào retrieval.
 
     Strategies:
-      - "expansion": Thêm từ đồng nghĩa, alias, tên cũ
-      - "decomposition": Tách query phức tạp thành 2-3 sub-queries
-      - "hyde": Sinh câu trả lời giả (hypothetical document) để embed thay query
+      - "expansion": thêm alias/đồng nghĩa/tên cũ
+      - "decomposition": tách câu hỏi phức tạp thành 2-3 sub-queries
+      - "hyde": sinh "pseudo-document" (HyDE) để embed thay query
 
-    TODO Sprint 3 (nếu chọn query transformation):
-    Gọi LLM với prompt phù hợp với từng strategy.
-
-    Ví dụ expansion prompt:
-        "Given the query: '{query}'
-         Generate 2-3 alternative phrasings or related terms in Vietnamese.
-         Output as JSON array of strings."
-
-    Ví dụ decomposition:
-        "Break down this complex query into 2-3 simpler sub-queries: '{query}'
-         Output as JSON array."
-
-    Khi nào dùng:
-    - Expansion: query dùng alias/tên cũ (ví dụ: "Approval Matrix" → "Access Control SOP")
-    - Decomposition: query hỏi nhiều thứ một lúc
-    - HyDE: query mơ hồ, search theo nghĩa không hiệu quả
+    Ghi chú:
+    - Ưu tiên gọi LLM để sinh ra JSON array (ổn định cho eval).
+    - Nếu không có API key/LLM lỗi → fallback heuristic, nhưng vẫn luôn trả về tối thiểu [query].
     """
-    # TODO Sprint 3: Implement query transformation
-    # Tạm thời trả về query gốc
-    return [query]
+
+    def _norm(s: str) -> str:
+        s = unicodedata.normalize("NFKC", s)
+        s = s.strip().lower()
+        s = re.sub(r"\s+", " ", s)
+        return s
+
+    def _dedupe_keep_order(items: List[str], max_n: int) -> List[str]:
+        out: List[str] = []
+        seen = set()
+        for it in items:
+            if not it:
+                continue
+            it2 = it.strip()
+            if not it2:
+                continue
+            key = _norm(it2)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(it2)
+            if len(out) >= max_n:
+                break
+        return out
+
+    def _parse_json_string_list(text: str) -> List[str]:
+        """Parse LLM output into list[str]. Accepts JSON array or {"queries": [...]}.
+        Falls back to extracting first [...] block; then to line/bullet splitting.
+        """
+        if not text:
+            return []
+        t = text.strip()
+
+        def _try_load(s: str) -> List[str]:
+            obj = json.loads(s)
+            if isinstance(obj, list):
+                return [str(x) for x in obj if str(x).strip()]
+            if isinstance(obj, dict):
+                for k in ("queries", "items", "alternatives", "subqueries"):
+                    if k in obj and isinstance(obj[k], list):
+                        return [str(x) for x in obj[k] if str(x).strip()]
+            return []
+
+        try:
+            return _try_load(t)
+        except Exception:
+            pass
+
+        # Try to extract JSON array substring
+        try:
+            start = t.find("[")
+            end = t.rfind("]")
+            if 0 <= start < end:
+                return _try_load(t[start : end + 1])
+        except Exception:
+            pass
+
+        # Fallback: split lines/bullets
+        lines = []
+        for line in t.splitlines():
+            line = re.sub(r"^[-*•\d.\)\s]+", "", line).strip()
+            if line:
+                lines.append(line)
+        return lines
+
+    q = (query or "").strip()
+    if not q:
+        return []
+
+    strat = (strategy or "expansion").strip().lower()
+
+    # Heuristic alias map (bổ sung nhẹ để bắt các tên cũ/alias thường gặp trong bộ docs)
+    alias_map = {
+        "approval matrix": [
+            "Access Control SOP",
+            "quy trình cấp quyền",
+            "quy trình kiểm soát truy cập",
+            "ma trận phê duyệt cấp quyền",
+        ],
+        "access control": ["Access Control SOP", "kiểm soát truy cập", "cấp quyền"],
+        "sla": ["SLA", "thời gian xử lý ticket", "thời gian phản hồi"],
+        "ticket p1": ["SLA ticket P1", "P1", "ưu tiên P1"],
+        "refund": ["hoàn tiền", "chính sách hoàn tiền", "policy refund v4"],
+        "hoàn tiền": ["refund", "chính sách hoàn tiền", "policy refund v4"],
+        "helpdesk": ["IT Helpdesk FAQ", "support helpdesk faq"],
+    }
+
+    base_candidates: List[str] = [q]
+    nq = _norm(q)
+    for k, vals in alias_map.items():
+        if k in nq:
+            base_candidates.extend(vals)
+
+    # LLM prompts: yêu cầu trả về JSON array để parse ổn định
+    def _llm_generate_list(prompt: str) -> List[str]:
+        try:
+            raw = call_llm(prompt)
+            return _parse_json_string_list(raw)
+        except Exception:
+            return []
+
+    if strat == "expansion":
+        prompt = (
+            "You are a query rewriting assistant for RAG retrieval. "
+            "Generate 2-3 alternative phrasings / related terms for the Vietnamese query below. "
+            "Focus on synonyms, aliases, and document title variants. "
+            "Return ONLY a JSON array of strings.\n\n"
+            f"Query: {q}"
+        )
+        llm_alts = _llm_generate_list(prompt)
+        return _dedupe_keep_order(base_candidates + llm_alts, max_n=4)
+
+    if strat == "decomposition":
+        prompt = (
+            "Decompose the Vietnamese question below into 2-3 simpler sub-queries suitable for retrieval. "
+            "Each sub-query should be self-contained and short. "
+            "Return ONLY a JSON array of strings.\n\n"
+            f"Question: {q}"
+        )
+        llm_sub = _llm_generate_list(prompt)
+        if llm_sub:
+            return _dedupe_keep_order([q] + llm_sub, max_n=4)
+
+        # Heuristic decomposition if no LLM
+        parts = re.split(r"\s+(?:và|&|\+|/|,|;|\.)\s+", q)
+        parts = [p.strip() for p in parts if p.strip()]
+        if len(parts) <= 1:
+            return [q]
+        # Keep original + first 2-3 parts
+        return _dedupe_keep_order([q] + parts, max_n=4)
+
+    if strat == "hyde":
+        # HyDE: sinh pseudo-document chứa keyword nhưng tránh bịa số liệu
+        prompt = (
+            "Write a short pseudo-document (3-6 sentences) that would help retrieve relevant policy/FAQ text for the question below. "
+            "Include likely keywords and section titles, but DO NOT invent specific numbers, dates, or penalties. "
+            "If a number/date would be needed, use placeholders like <NUMBER> or <DATE>. "
+            "Return ONLY a JSON array with exactly 1 string (the pseudo-document).\n\n"
+            f"Question: {q}"
+        )
+        hyde_list = _llm_generate_list(prompt)
+        hyde_doc = hyde_list[0] if hyde_list else ""
+        if hyde_doc.strip():
+            return _dedupe_keep_order([hyde_doc, q] + base_candidates[1:], max_n=4)
+        return _dedupe_keep_order(base_candidates, max_n=4)
+
+    raise ValueError(f"Unknown transform strategy: {strategy}")
 
 
 # =============================================================================
@@ -515,6 +670,7 @@ def compare_retrieval_strategies(query: str) -> None:
             print(f"Chưa implement: {e}")
         except Exception as e:
             print(f"Lỗi: {e}")
+
 
 
 # =============================================================================
