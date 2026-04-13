@@ -53,7 +53,7 @@ def call_qwen_judge(prompt: str) -> Dict[str, Any]:
     Không trả về bất kỳ text nào khác ngoài JSON."""
     try:
         response = client.chat.completions.create(
-            model="qwen3.6-plus",
+            model="qwen-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}

@@ -14,10 +14,9 @@ Definition of Done Sprint 1:
 """
 
 import os
-import json
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -266,29 +265,40 @@ def get_embedding(text: str) -> List[float]:
         return model.encode(text).tolist()
     """
 
-    provider = os.getenv("LLM_PROVIDER", "openai").lower()
-    embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-    
-    try: 
-        if provider == "openai":
-            from openai import OpenAI
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    provider_raw = os.getenv("EMBEDDING_PROVIDER", "openai,local")
+    providers = [p.strip().lower() for p in provider_raw.split(",") if p.strip()]
+    if not providers:
+        providers = ["openai", "local"]
 
-            response = client.embeddings.create(
-                input=text,
-                model = embedding_model
-            )
+    openai_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    local_model = os.getenv("LOCAL_EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 
-            return response.data[0].embedding
-        elif provider == "local":
-            from sentence_transformers import SentenceTransformer
-            model_name = os.getenv("LOCAL_EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
-            model = SentenceTransformer(model_name)
+    errors = []
+    for provider in providers:
+        try:
+            if provider == "openai":
+                from openai import OpenAI
 
-            return model.encode(text).tolist()
-    except Exception as e:
-        print(f"Lỗi khi tạo embedding: {e}")
-        return []  # Trả về embedding rỗng nếu có lỗi
+                api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+                if not api_key:
+                    raise ValueError("OPENAI_API_KEY chưa được cấu hình")
+
+                client = OpenAI(api_key=api_key)
+                response = client.embeddings.create(input=text, model=openai_model)
+                return response.data[0].embedding
+
+            if provider == "local":
+                from sentence_transformers import SentenceTransformer
+
+                model = SentenceTransformer(local_model)
+                return model.encode(text).tolist()
+
+            errors.append(f"Provider không hợp lệ: {provider}")
+        except Exception as e:
+            errors.append(f"{provider}: {e}")
+
+    print(f"Lỗi khi tạo embedding với mọi provider: {' | '.join(errors)}")
+    return []
 
 
 def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None:
@@ -355,6 +365,9 @@ def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None
             # Gọi hàm lấy vector 
             embedding = get_embedding(chunk["text"])
 
+            if not embedding:
+                continue
+
             # Gom dữ liệu vào mảng batch
             batch_ids.append(chunk_id)
             batch_embeddings.append(embedding)
@@ -369,9 +382,9 @@ def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None
                 documents=batch_documents,
                 metadatas=batch_metadatas
             )
-            
-        print(f"    → Đã index {len(chunks)} chunks thành công.")
-        total_chunks += len(chunks)
+
+        print(f"    → Đã index {len(batch_ids)}/{len(chunks)} chunks thành công.")
+        total_chunks += len(batch_ids)
 
         # Placeholder để code không lỗi khi chưa implement
         # doc = preprocess_document(raw_text, str(filepath))
