@@ -371,84 +371,46 @@ def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None
 def list_chunks(db_dir: Path = CHROMA_DB_DIR, n: int = 5) -> None:
     """
     In ra n chunk đầu tiên trong ChromaDB để kiểm tra chất lượng index.
-
-    TODO Sprint 1:
-    Implement sau khi hoàn thành build_index().
-    Kiểm tra:
-    - Chunk có giữ đủ metadata không? (source, section, effective_date)
-    - Chunk có bị cắt giữa điều khoản không?
-    - Metadata effective_date có đúng không?
     """
     try:
         import chromadb
         client = chromadb.PersistentClient(path=str(db_dir))
-
+        
+        # Lấy collection đã tạo từ bước build_index
         collection = client.get_collection("rag_lab")
+        
+        # TỐI ƯU: Dùng peek() thay vì get() để xem lướt dữ liệu
+        results = collection.peek(limit=n)
 
-        results = collection.get(limit=n, include=["documents", "metadatas"])
-
-        print(f"\n=== Top {n} chunks trong index ===\n")
-
-        for i, (doc, meta) in enumerate(zip(results["documents"], results["metadatas"])):
-            print(f"[Chunk {i+1}]")
+        print(f"\n=== Top {n} chunks trong Database ===\n")
+        
+        # Duyệt qua các list trong kết quả của peek()
+        for i in range(len(results["ids"])):
+            chunk_id = results["ids"][i]
+            doc = results["documents"][i]
+            meta = results["metadatas"][i]
+            
+            print(f"[Chunk {i+1}] ID: {chunk_id}")
             print(f"  Source: {meta.get('source', 'N/A')}")
+            print(f"  Department: {meta.get('department', 'N/A')}") 
             print(f"  Section: {meta.get('section', 'N/A')}")
             print(f"  Effective Date: {meta.get('effective_date', 'N/A')}")
-        all_meta = results["metadatas"]
-        total = len(all_meta)
-        print(f"\nTổng chunks: {total}")
+            # Tăng số ký tự preview lên 150 để dễ đọc hiểu ngữ cảnh hơn
+            print(f"  Text preview: {doc[:150]}...\n")
+            
+    except Exception as e:
+        print(f"Lỗi khi đọc index: {e}")
+        print("Hãy đảm bảo bạn đã chạy build_index() trước.")
 
-        # 1. Kiểm tra source coverage
-        missing_source = [i for i, m in enumerate(all_meta) if not m.get("source")]
-        print(f"\n--- Source coverage ---")
-        print(f"  Chunks có source: {total - len(missing_source)}/{total}")
-        if missing_source:
-            print(f"  Chunks thiếu source (index): {missing_source}")
-
-        # 2. Phân bố theo department
-        departments: Dict[str, int] = {}
-        for meta in all_meta:
-            dept = meta.get("department", "unknown")
-            departments[dept] = departments.get(dept, 0) + 1
-
-        print(f"\n--- Phân bố theo department ---")
-        for dept, count in sorted(departments.items(), key=lambda x: -x[1]):
-            print(f"  {dept}: {count} chunks")
-
-        # 3. Kiểm tra effective_date
-        missing_date = []
-        for i, meta in enumerate(all_meta):
-            if meta.get("effective_date") in ("unknown", "", None):
-                missing_date.append((i, meta.get("source", "N/A")))
-
-        print(f"\n--- Effective date coverage ---")
-        print(f"  Chunks có effective_date: {total - len(missing_date)}/{total}")
-        if missing_date:
-            print(f"  Chunks thiếu effective_date ({len(missing_date)}):")
-            sources_missing = set(src for _, src in missing_date)
-            for src in sorted(sources_missing):
-                print(f"    - {src}")
-
-        # 4. Phân bố theo section
-        sections: Dict[str, int] = {}
-        for meta in all_meta:
-            sec = meta.get("section", "unknown")
-            sections[sec] = sections.get(sec, 0) + 1
-
-        print(f"\n--- Phân bố theo section ---")
-        for sec, count in sorted(sections.items(), key=lambda x: -x[1]):
-            print(f"  {sec}: {count} chunks")
-
-        # 5. Phân bố theo access level
-        access_levels: Dict[str, int] = {}
-        for meta in all_meta:
-            acc = meta.get("access", "unknown")
-            access_levels[acc] = access_levels.get(acc, 0) + 1
-
-        print(f"\n--- Phân bố theo access level ---")
-        for acc, count in sorted(access_levels.items(), key=lambda x: -x[1]):
-            print(f"  {acc}: {count} chunks")
+def inspect_metadata_coverage(db_dir: Path = CHROMA_DB_DIR) -> None:
     """
+    Kiểm tra phân phối metadata trong toàn bộ index.
+
+    Checklist Sprint 1:
+    - Mọi chunk đều có source?
+    - Có bao nhiêu chunk từ mỗi department?
+    - Chunk nào thiếu effective_date?
+
     TODO: Implement sau khi build_index() hoàn thành.
     """
     try:
@@ -466,20 +428,23 @@ def list_chunks(db_dir: Path = CHROMA_DB_DIR, n: int = 5) -> None:
         missing_source = 0
 
         for meta in results["metadatas"]:
+            # Đếm theo department
             dept = meta.get("department", "unknown")
             departments[dept] = departments.get(dept, 0) + 1
-
+            
+            # Kiểm tra effective_date missing
             if meta.get("effective_date") in ("unknown", "", None):
                 missing_date += 1
-
+                
+            # Kiểm tra source missing
             if meta.get("source") in ("unknown", "", None):
                 missing_source += 1
 
         print("Phân bố theo department:")
         for dept, count in departments.items():
-            print(f"  {dept}: {count} chunks")
-
-        print(f"Chunks thiếu source: {missing_source}")    
+            print(f"  - {dept}: {count} chunks")
+            
+        print(f"Chunks thiếu source: {missing_source}")
         print(f"Chunks thiếu effective_date: {missing_date}")
 
     except Exception as e:
@@ -518,12 +483,12 @@ if __name__ == "__main__":
     print("\n--- Build Full Index ---")
     print("Lưu ý: Cần implement get_embedding() trước khi chạy bước này!")
     # Uncomment dòng dưới sau khi implement get_embedding():
-    # build_index()
+    build_index()
 
     # Bước 4: Kiểm tra index
     # Uncomment sau khi build_index() thành công:
-    # list_chunks()
-    # inspect_metadata_coverage()
+    list_chunks()
+    inspect_metadata_coverage()
 
     print("\nSprint 1 setup hoàn thành!")
     print("Việc cần làm:")
