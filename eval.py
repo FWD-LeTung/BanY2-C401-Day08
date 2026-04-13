@@ -15,6 +15,7 @@ from rag_answer import rag_answer
 # =============================================================================
 
 TEST_QUESTIONS_PATH = Path(__file__).parent / "data" / "test_questions.json"
+GRADING_TESTING_PATH = Path(__file__).parent / "data" / "grading_testing.json"
 RESULTS_DIR = Path(__file__).parent / "results"
 
 # Cấu hình baseline (Sprint 2)
@@ -60,7 +61,7 @@ def call_qwen_judge(prompt: str) -> Dict[str, Any]:
             ],
             temperature=0.0
         )
-        content = response.choices[0].message.content
+        content = response.choices[0].message.content or ""
         content_cleaned = re.sub(r"```json\n|\n```|```", "", content).strip()
         return json.loads(content_cleaned)
     except Exception as e:
@@ -225,6 +226,21 @@ def run_scorecard(
     return results
 
 
+def load_questions(path: Path) -> List[Dict[str, Any]]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            questions = json.load(f)
+        print(f"\nLoading test questions từ: {path}")
+        print(f"Tìm thấy {len(questions)} câu hỏi")
+        for q in questions[:3]:
+            print(f"  [{q['id']}] {q['question']} ({q.get('category', '')})")
+        print("  ...")
+        return questions
+    except FileNotFoundError:
+        print(f"\nKhông tìm thấy file: {path}")
+        return []
+
+
 # =============================================================================
 # A/B COMPARISON
 # =============================================================================
@@ -249,11 +265,11 @@ def compare_ab(
 
         b_avg = sum(b_scores) / len(b_scores) if b_scores else None
         v_avg = sum(v_scores) / len(v_scores) if v_scores else None
-        delta = (v_avg - b_avg) if (b_avg and v_avg) else None
+        delta = (v_avg - b_avg) if (b_avg is not None and v_avg is not None) else None
 
-        b_str = f"{b_avg:.2f}" if b_avg else "N/A"
-        v_str = f"{v_avg:.2f}" if v_avg else "N/A"
-        d_str = f"{delta:+.2f}" if delta else "N/A"
+        b_str = f"{b_avg:.2f}" if b_avg is not None else "N/A"
+        v_str = f"{v_avg:.2f}" if v_avg is not None else "N/A"
+        d_str = f"{delta:+.2f}" if delta is not None else "N/A"
 
         print(f"{metric:<20} {b_str:>10} {v_str:>10} {d_str:>8}")
 
@@ -276,8 +292,8 @@ def compare_ab(
         print(f"{qid:<6} {b_scores_str:<22} {v_scores_str:<22} {better:<10}")
 
     if output_csv:
-        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         csv_path = RESULTS_DIR / output_csv
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
         combined = baseline_results + variant_results
         if combined:
             with open(csv_path, "w", newline="", encoding="utf-8") as f:
@@ -334,38 +350,41 @@ if __name__ == "__main__":
     print("Sprint 4: Evaluation & Scorecard")
     print("=" * 60)
 
-    print(f"\nLoading test questions từ: {TEST_QUESTIONS_PATH}")
-    try:
-        with open(TEST_QUESTIONS_PATH, "r", encoding="utf-8") as f:
-            test_questions = json.load(f)
-        print(f"Tìm thấy {len(test_questions)} câu hỏi")
-        for q in test_questions[:3]:
-            print(f"  [{q['id']}] {q['question']} ({q['category']})")
-        print("  ...")
-    except FileNotFoundError:
-        print("Không tìm thấy file test_questions.json!")
-        test_questions = []
+    datasets = {
+        "test_questions": TEST_QUESTIONS_PATH,
+        "grading_testing": GRADING_TESTING_PATH,
+    }
 
-    # --- Chạy Baseline ---
-    print("\n--- Chạy Baseline ---")
-    try:
-        # Ở đây tôi set verbose=True để nó in đúng format của từng câu hỏi giống bản gốc
-        baseline_results = run_scorecard(config=BASELINE_CONFIG, test_questions=test_questions, verbose=True)
-        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        baseline_md = generate_scorecard_summary(baseline_results, "baseline_dense")
-        scorecard_path = RESULTS_DIR / "scorecard_baseline.md"
-        scorecard_path.write_text(baseline_md, encoding="utf-8")
-        print(f"\nScorecard lưu tại: {scorecard_path}")
-    except NotImplementedError:
-        print("Pipeline chưa implement. Hoàn thành Sprint 2 trước.")
-        baseline_results = []
+    for dataset_name, dataset_path in datasets.items():
+        print(f"\n{'='*70}")
+        print(f"Dataset: {dataset_name}")
+        print(f"{'='*70}")
 
-    # --- Chạy Variant ---
-    print("\n--- Chạy Variant ---")
-    variant_results = run_scorecard(config=VARIANT_CONFIG, test_questions=test_questions, verbose=True)
-    variant_md = generate_scorecard_summary(variant_results, VARIANT_CONFIG["label"])
-    (RESULTS_DIR / "scorecard_variant.md").write_text(variant_md, encoding="utf-8")
+        test_questions = load_questions(dataset_path)
+        dataset_results_dir = RESULTS_DIR / dataset_name
+        dataset_results_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- A/B Comparison ---
-    if baseline_results and variant_results:
-        compare_ab(baseline_results, variant_results, output_csv="ab_comparison.csv")
+        print("\n--- Chạy Baseline ---")
+        try:
+            baseline_results = run_scorecard(config=BASELINE_CONFIG, test_questions=test_questions, verbose=True)
+            baseline_md = generate_scorecard_summary(baseline_results, f"{dataset_name}_baseline_dense")
+            baseline_path = dataset_results_dir / "scorecard_baseline.md"
+            baseline_path.write_text(baseline_md, encoding="utf-8")
+            print(f"\nScorecard lưu tại: {baseline_path}")
+        except NotImplementedError:
+            print("Pipeline chưa implement. Hoàn thành Sprint 2 trước.")
+            baseline_results = []
+
+        print("\n--- Chạy Variant ---")
+        variant_results = run_scorecard(config=VARIANT_CONFIG, test_questions=test_questions, verbose=True)
+        variant_md = generate_scorecard_summary(variant_results, f"{dataset_name}_{VARIANT_CONFIG['label']}")
+        variant_path = dataset_results_dir / "scorecard_variant.md"
+        variant_path.write_text(variant_md, encoding="utf-8")
+        print(f"\nScorecard lưu tại: {variant_path}")
+
+        if baseline_results and variant_results:
+            compare_ab(
+                baseline_results,
+                variant_results,
+                output_csv=f"{dataset_name}/ab_comparison.csv",
+            )

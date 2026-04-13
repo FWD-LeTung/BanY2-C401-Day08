@@ -253,13 +253,13 @@ def retrieve_hybrid(
     - Corpus có cả câu tự nhiên VÀ tên riêng, mã lỗi, điều khoản
     - Query như "Approval Matrix" khi doc đổi tên thành "Access Control SOP"
     """
-    # TODO Sprint 3: Implement hybrid RRF
-    
-    dense_results = retrieve_dense(query, top_k=top_k*2) 
-    sparse_results = retrieve_sparse(query, top_k=top_k*2)
+    dense_results = retrieve_dense(query, top_k=top_k * 2)
+    sparse_results = retrieve_sparse(query, top_k=top_k * 2)
 
     if not dense_results and not sparse_results:
-         return sparse_results[:top_k]
+        return []
+    if not dense_results:
+        return sparse_results[:top_k]
     if not sparse_results:
         return dense_results[:top_k]
     
@@ -271,8 +271,8 @@ def retrieve_hybrid(
 
         return f"{source}|{section}|{hash(text)}"
 
-    dense_ranks = {doc_key(doc): rank for rank, doc in enumerate(dense_results)}
-    sparse_ranks = {doc_key(doc): rank for rank, doc in enumerate(sparse_results)}
+    dense_ranks = {doc_key(doc): rank for rank, doc in enumerate(dense_results, start=1)}
+    sparse_ranks = {doc_key(doc): rank for rank, doc in enumerate(sparse_results, start=1)}
 
     merged_docs: Dict[str, Dict[str, Any]] = {}
     for item in dense_results + sparse_results:
@@ -284,17 +284,17 @@ def retrieve_hybrid(
                 "score": 0.0
             }
 
-    rrf_scores = 60.0
+    rrf_k = 60.0
     for key, item in merged_docs.items():
         dense_rank = dense_ranks.get(key)
         sparse_rank = sparse_ranks.get(key)
 
-        rrf_scores = 0.0
+        rrf_score = 0.0
         if dense_rank is not None:
-            rrf_scores += dense_weight * (1 / (60 + dense_rank))
+            rrf_score += dense_weight * (1 / (rrf_k + dense_rank))
         if sparse_rank is not None:
-            rrf_scores += sparse_weight * (1 / (60 + sparse_rank))
-        item["score"] = rrf_scores
+            rrf_score += sparse_weight * (1 / (rrf_k + sparse_rank))
+        item["score"] = rrf_score
 
     results = sorted(merged_docs.values(), key=lambda x: x["score"], reverse=True)
     return results[:top_k]
@@ -304,6 +304,8 @@ def retrieve_hybrid(
 # RERANK (Sprint 3 alternative)
 # Cross-encoder để chấm lại relevance sau search rộng
 # =============================================================================
+
+_rerank_model = None
 
 def rerank(
     query: str,
@@ -335,14 +337,28 @@ def rerank(
     - Dense/hybrid trả về nhiều chunk nhưng có noise
     - Muốn chắc chắn chỉ 3-5 chunk tốt nhất vào prompt
     """
-    # TODO Sprint 3: Implement rerank
-    # Tạm thời trả về top_k đầu tiên (không rerank)
+    global _rerank_model
 
+    if not candidates:
+        return []
 
+    if _rerank_model is None:
+        from sentence_transformers import CrossEncoder
+        _rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
-    return candidates[:top_k]
+    pairs = [[query, chunk["text"]] for chunk in candidates]
+    scores = _rerank_model.predict(pairs)
 
+    for i, score in enumerate(scores):
+        candidates[i]["score"] = float(score)
 
+    ranked_candidates = sorted(
+        zip(candidates, scores),
+        key=lambda x: x[1],
+        reverse=True
+    )
+    final_selection = [chunk for chunk, score in ranked_candidates[:top_k]]
+    return final_selection
 # =============================================================================
 # QUERY TRANSFORMATION (Sprint 3 alternative)
 # =============================================================================
