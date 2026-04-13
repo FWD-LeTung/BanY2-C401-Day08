@@ -407,7 +407,7 @@ def inspect_metadata_coverage(db_dir: Path = CHROMA_DB_DIR) -> None:
     Kiểm tra phân phối metadata trong toàn bộ index.
 
     Checklist Sprint 1:
-    - Mọi chunk đều có source?
+    - Mọi chunk đều có source? 
     - Có bao nhiêu chunk từ mỗi department?
     - Chunk nào thiếu effective_date?
 
