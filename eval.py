@@ -18,10 +18,13 @@ A/B Rule (từ slide):
 """
 
 import json
+import os
+import re
 import csv
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from dotenv import load_dotenv
 from rag_answer import rag_answer
 
 # =============================================================================
@@ -55,6 +58,48 @@ VARIANT_CONFIG = {
 # SCORING FUNCTIONS
 # 4 metrics từ slide: Faithfulness, Answer Relevance, Context Recall, Completeness
 # =============================================================================
+load_dotenv()
+def call_qwen_judge(prompt: str) -> Dict[str, Any]:
+    """
+    Gọi API Qwen để chấm điểm. 
+    Yêu cầu: pip install openai
+    Bạn cần thêm QWEN_API_KEY vào file .env
+    """
+    from openai import OpenAI
+    
+    # Cấu hình base_url theo tài liệu của Qwen (DashScope) hoặc provider bạn đang dùng
+    client = OpenAI(
+        api_key=os.getenv("QWEN_API_KEY"),
+        base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1" 
+    )
+    
+    system_prompt = """Bạn là một giám khảo chuyên môn cao, đánh giá khắt khe hệ thống RAG. 
+    BẠN PHẢI TRẢ VỀ ĐỊNH DẠNG JSON CHUẨN XÁC: {"score": <int>, "notes": "<string>"}
+    Không trả về bất kỳ text nào khác ngoài JSON."""
+
+    try:
+        response = client.chat.completions.create(
+            model="qwen3.6-plus", # Hoặc thay bằng string model Qwen 3.6 tương ứng của bạn
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0 # Để 0 để kết quả chấm điểm ổn định
+        )
+        
+        content = response.choices[0].message.content
+        
+        # Parse JSON an toàn (loại bỏ markdown block nếu model sinh ra)
+        content_cleaned = re.sub(r"```json\n|\n```|```", "", content).strip()
+        result = json.loads(content_cleaned)
+        
+        return {
+            "score": int(result.get("score", 1)),
+            "notes": str(result.get("notes", "LLM Judge did not provide notes."))
+        }
+    except Exception as e:
+        print(f"[LLM Judge Error] Lỗi khi gọi Qwen hoặc parse JSON: {e}")
+        return {"score": 1, "notes": f"Lỗi chấm điểm tự động: {e}"}
 
 def score_faithfulness(
     answer: str,
@@ -62,39 +107,32 @@ def score_faithfulness(
 ) -> Dict[str, Any]:
     """
     Faithfulness: Câu trả lời có bám đúng chứng cứ đã retrieve không?
-    Câu hỏi: Model có tự bịa thêm thông tin ngoài retrieved context không?
-
-    Thang điểm 1-5:
-      5: Mọi thông tin trong answer đều có trong retrieved chunks
-      4: Gần như hoàn toàn grounded, 1 chi tiết nhỏ chưa chắc chắn
-      3: Phần lớn grounded, một số thông tin có thể từ model knowledge
-      2: Nhiều thông tin không có trong retrieved chunks
-      1: Câu trả lời không grounded, phần lớn là model bịa
-
-    TODO Sprint 4 — Có 2 cách chấm:
-
-    Cách 1 — Chấm thủ công (Manual, đơn giản):
-        Đọc answer và chunks_used, chấm điểm theo thang trên.
-        Ghi lý do ngắn gọn vào "notes".
-
-    Cách 2 — LLM-as-Judge (Tự động, nâng cao):
-        Gửi prompt cho LLM:
-            "Given these retrieved chunks: {chunks}
-             And this answer: {answer}
-             Rate the faithfulness on a scale of 1-5.
-             5 = completely grounded in the provided context.
-             1 = answer contains information not in the context.
-             Output JSON: {'score': <int>, 'reason': '<string>'}"
-
-    Trả về dict với: score (1-5) và notes (lý do)
     """
-    # TODO Sprint 4: Implement scoring
-    # Tạm thời trả về None (yêu cầu chấm thủ công)
-    return {
-        "score": None,
-        "notes": "TODO: Chấm thủ công hoặc implement LLM-as-Judge",
-    }
+    if not chunks_used:
+        # Nếu model trả lời "Không đủ dữ liệu" khi không có context, đó là faithful.
+        if "không đủ dữ liệu" in answer.lower() or "không biết" in answer.lower():
+            return {"score": 5, "notes": "Mô hình abstain đúng do không có context."}
+        return {"score": 1, "notes": "Mô hình bịa câu trả lời dù không có context."}
 
+    context_text = "\n\n".join([f"- {c.get('text', '')}" for c in chunks_used])
+    
+    prompt = f"""Đánh giá Độ trung thực (Faithfulness) của câu trả lời dựa trên ngữ cảnh được cung cấp.
+    Thang điểm 1-5:
+    5: Mọi thông tin trong câu trả lời đều có trong ngữ cảnh.
+    4: Gần như hoàn toàn bám sát, có 1 chi tiết nhỏ tự suy luận nhưng không sai.
+    3: Phần lớn bám sát, nhưng có thông tin được model tự thêm vào.
+    2: Nhiều thông tin trong câu trả lời không xuất hiện trong ngữ cảnh.
+    1: Câu trả lời chứa thông tin hoàn toàn bịa đặt (hallucinate) so với ngữ cảnh.
+
+    Ngữ cảnh:
+    {context_text}
+
+    Câu trả lời của hệ thống:
+    {answer}
+
+    Hãy xuất kết quả ra JSON format: {{"score": <điểm_số_từ_1_đến_5>, "notes": "<lý_do_ngắn_gọn_vì_sao_cho_điểm_này>"}}"""
+
+    return call_qwen_judge(prompt)
 
 def score_answer_relevance(
     query: str,
@@ -102,21 +140,25 @@ def score_answer_relevance(
 ) -> Dict[str, Any]:
     """
     Answer Relevance: Answer có trả lời đúng câu hỏi người dùng hỏi không?
-    Câu hỏi: Model có bị lạc đề hay trả lời đúng vấn đề cốt lõi không?
-
-    Thang điểm 1-5:
-      5: Answer trả lời trực tiếp và đầy đủ câu hỏi
-      4: Trả lời đúng nhưng thiếu vài chi tiết phụ
-      3: Trả lời có liên quan nhưng chưa đúng trọng tâm
-      2: Trả lời lạc đề một phần
-      1: Không trả lời câu hỏi
-
-    TODO Sprint 4: Implement tương tự score_faithfulness
     """
-    return {
-        "score": None,
-        "notes": "TODO: Implement score_answer_relevance",
-    }
+    prompt = f"""Đánh giá Sự liên quan (Answer Relevance) của câu trả lời so với câu hỏi.
+    Thang điểm 1-5:
+    5: Trả lời trực tiếp, chính xác và đúng trọng tâm câu hỏi.
+    4: Trả lời đúng trọng tâm nhưng có hơi dài dòng hoặc thừa một chút thông tin.
+    3: Có liên quan đến chủ đề nhưng chưa đi thẳng vào vấn đề cốt lõi.
+    2: Trả lời lạc đề một phần.
+    1: Hoàn toàn không trả lời câu hỏi được đặt ra.
+
+    Câu hỏi của người dùng:
+    {query}
+
+    Câu trả lời của hệ thống:
+    {answer}
+
+    Hãy xuất kết quả ra JSON format: {{"score": <điểm_số_từ_1_đến_5>, "notes": "<lý_do_ngắn_gọn_vì_sao_cho_điểm_này>"}}"""
+
+    return call_qwen_judge(prompt)
+
 
 
 def score_context_recall(
@@ -181,27 +223,30 @@ def score_completeness(
     expected_answer: str,
 ) -> Dict[str, Any]:
     """
-    Completeness: Answer có thiếu điều kiện ngoại lệ hoặc bước quan trọng không?
-    Câu hỏi: Answer có bao phủ đủ thông tin so với expected_answer không?
-
-    Thang điểm 1-5:
-      5: Answer bao gồm đủ tất cả điểm quan trọng trong expected_answer
-      4: Thiếu 1 chi tiết nhỏ
-      3: Thiếu một số thông tin quan trọng
-      2: Thiếu nhiều thông tin quan trọng
-      1: Thiếu phần lớn nội dung cốt lõi
-
-    TODO Sprint 4:
-    Option 1 — Chấm thủ công: So sánh answer vs expected_answer và chấm.
-    Option 2 — LLM-as-Judge:
-        "Compare the model answer with the expected answer.
-         Rate completeness 1-5. Are all key points covered?
-         Output: {'score': int, 'missing_points': [str]}"
+    Completeness: Answer có bao phủ đủ thông tin so với expected_answer không?
     """
-    return {
-        "score": None,
-        "notes": "TODO: Implement score_completeness (so sánh với expected_answer)",
-    }
+    if not expected_answer:
+        return {"score": 5, "notes": "Không có expected answer để đối chiếu (câu hỏi bẫy)."}
+
+    prompt = f"""Đánh giá Độ đầy đủ (Completeness) của câu trả lời so với đáp án mẫu.
+    Thang điểm 1-5:
+    5: Bao gồm đủ TẤT CẢ các điểm ý chính quan trọng có trong đáp án mẫu.
+    4: Trả lời đúng nhưng thiếu 1 chi tiết nhỏ/điều kiện phụ.
+    3: Thiếu một số thông tin quan trọng.
+    2: Thiếu rất nhiều thông tin cốt lõi.
+    1: Câu trả lời hoàn toàn sơ sài, bỏ sót phần lớn nội dung so với đáp án mẫu.
+
+    Câu hỏi: {query}
+    
+    Đáp án mẫu (Expected Answer):
+    {expected_answer}
+
+    Câu trả lời của hệ thống:
+    {answer}
+
+    Hãy xuất kết quả ra JSON format: {{"score": <điểm_số_từ_1_đến_5>, "notes": "<lý_do_ngắn_gọn_vì_sao_cho_điểm_này>"}}"""
+
+    return call_qwen_judge(prompt)
 
 
 # =============================================================================
