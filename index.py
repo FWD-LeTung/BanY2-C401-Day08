@@ -299,8 +299,11 @@ def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None
     db_dir.mkdir(parents=True, exist_ok=True)
 
     # TODO: Khởi tạo ChromaDB
-    # client = chromadb.PersistentClient(path=str(db_dir))
-    # collection = client.get_or_create_collection(...)
+    client = chromadb.PersistentClient(path=str(db_dir))
+    collection = client.get_or_create_collection(
+        name="rag_lab",
+        metadata={"hnsw:space": "cosine"}
+    )
 
     total_chunks = 0
     doc_files = list(docs_dir.glob("*.txt"))
@@ -314,31 +317,50 @@ def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None
         raw_text = filepath.read_text(encoding="utf-8")
 
         # TODO: Gọi preprocess_document
-        # doc = preprocess_document(raw_text, str(filepath))
+        doc = preprocess_document(raw_text, str(filepath))
 
         # TODO: Gọi chunk_document
-        # chunks = chunk_document(doc)
+        chunks = chunk_document(doc)
 
         # TODO: Embed và lưu từng chunk vào ChromaDB
-        # for i, chunk in enumerate(chunks):
-        #     chunk_id = f"{filepath.stem}_{i}"
-        #     embedding = get_embedding(chunk["text"])
-        #     collection.upsert(
-        #         ids=[chunk_id],
-        #         embeddings=[embedding],
-        #         documents=[chunk["text"]],
-        #         metadatas=[chunk["metadata"]],
-        #     )
-        # total_chunks += len(chunks)
+        batch_ids = []
+        batch_embeddings = []
+        batch_documents = []
+        batch_metadatas = []
 
-        # Placeholder để code không lỗi khi chưa implement
-        doc = preprocess_document(raw_text, str(filepath))
-        chunks = chunk_document(doc)
-        print(f"    → {len(chunks)} chunks (embedding chưa implement)")
+        for i, chunk in enumerate(chunks):
+            # Tạo ID chunk duy nhất
+            chunk_id = f"{filepath.stem}_{i}"
+
+            # Gọi hàm lấy vector 
+            embedding = get_embedding(chunk["text"])
+
+            # Gom dữ liệu vào mảng batch
+            batch_ids.append(chunk_id)
+            batch_embeddings.append(embedding)
+            batch_documents.append(chunk["text"])
+            batch_metadatas.append(chunk["metadata"])
+
+        # 3d. Upsert toàn bộ chunks của file này vào ChromaDB 
+        if batch_ids:
+            collection.upsert(
+                ids=batch_ids,
+                embeddings=batch_embeddings,
+                documents=batch_documents,
+                metadatas=batch_metadatas
+            )
+            
+        print(f"    → Đã index {len(chunks)} chunks thành công.")
         total_chunks += len(chunks)
 
+        # Placeholder để code không lỗi khi chưa implement
+        # doc = preprocess_document(raw_text, str(filepath))
+        # chunks = chunk_document(doc)
+        # print(f"    → {len(chunks)} chunks (embedding chưa implement)")
+        # total_chunks += len(chunks)
+
     print(f"\nHoàn thành! Tổng số chunks: {total_chunks}")
-    print("Lưu ý: Embedding chưa được implement. Xem TODO trong get_embedding() và build_index().")
+    # print("Lưu ý: Embedding chưa được implement. Xem TODO trong get_embedding() và build_index().")
 
 
 # =============================================================================
@@ -360,10 +382,13 @@ def list_chunks(db_dir: Path = CHROMA_DB_DIR, n: int = 5) -> None:
     try:
         import chromadb
         client = chromadb.PersistentClient(path=str(db_dir))
+
         collection = client.get_collection("rag_lab")
+
         results = collection.get(limit=n, include=["documents", "metadatas"])
 
         print(f"\n=== Top {n} chunks trong index ===\n")
+
         for i, (doc, meta) in enumerate(zip(results["documents"], results["metadatas"])):
             print(f"[Chunk {i+1}]")
             print(f"  Source: {meta.get('source', 'N/A')}")
@@ -399,15 +424,23 @@ def inspect_metadata_coverage(db_dir: Path = CHROMA_DB_DIR) -> None:
         # Đếm theo department, kiểm tra effective_date missing, v.v.
         departments = {}
         missing_date = 0
+        missing_source = 0
+
         for meta in results["metadatas"]:
             dept = meta.get("department", "unknown")
             departments[dept] = departments.get(dept, 0) + 1
+
             if meta.get("effective_date") in ("unknown", "", None):
                 missing_date += 1
+
+            if meta.get("source") in ("unknown", "", None):
+                missing_source += 1
 
         print("Phân bố theo department:")
         for dept, count in departments.items():
             print(f"  {dept}: {count} chunks")
+
+        print(f"Chunks thiếu source: {missing_source}")    
         print(f"Chunks thiếu effective_date: {missing_date}")
 
     except Exception as e:
