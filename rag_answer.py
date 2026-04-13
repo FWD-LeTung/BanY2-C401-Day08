@@ -118,6 +118,50 @@ def retrieve_dense(query: str, top_k: int = TOP_K_SEARCH) -> List[Dict[str, Any]
 # RETRIEVAL — SPARSE / BM25 (Keyword Search)
 # Dùng cho Sprint 3 Variant hoặc kết hợp Hybrid
 # =============================================================================
+_bm25_index = None
+_bm25_docs = []
+_bm25_meatas = []    
+
+def _tokenize_vi_en(text: str) -> List[str]:
+    """
+    Tokenizer đơn giản cho tiếng Việt và tiếng Anh.
+
+    Mục đích: chuẩn bị cho BM25, tách từ dựa trên whitespace và punctuation.
+    Có thể cải tiến sau bằng cách dùng thư viện chuyên dụng (ví dụ: underthesea).
+
+    Ví dụ:
+        "ERR-403-AUTH là lỗi gì?" → ["err", "403", "auth", "là", "lỗi", "gì"]
+    """
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE)  # Thay punctuation bằng space
+    tokens = text.split()
+    return [token for token in tokens if token]  # Loại bỏ token rỗng
+
+def _load_bm25_from_chroma() -> None:
+    global _bm25_index, _bm25_docs, _bm25_meatas
+
+    if _bm25_index is not None:
+        return  # Đã load rồi
+    
+    from index import CHROMA_DB_DIR
+    client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
+    collection = client.get_collection("rag_lab")
+    
+    data = collection.get(include=["documents", "metadatas"])
+    _bm25_docs = data.get("documents", []) or []
+    metas = data.get("metadatas", []) or []
+    docs = data.get("documents", []) or []
+
+    if not docs :
+        _bm25_index = BM250api([["__empty__"]])
+        _bm25_docs = []
+        _bm25_meatas = []
+        return
+
+    tokenized_corpus = [_tokenize_vi_en(doc) for doc in docs]
+    _bm25_index = BM25Okapi(tokenized_corpus)
+    _bm25_docs = docs
+    _bm25_meatas = metas
 
 def retrieve_sparse(query: str, top_k: int = TOP_K_SEARCH) -> List[Dict[str, Any]]:
     """
@@ -141,8 +185,12 @@ def retrieve_sparse(query: str, top_k: int = TOP_K_SEARCH) -> List[Dict[str, Any
         scores = bm25.get_scores(tokenized_query)
         top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
     """
-    # TODO Sprint 3: Implement BM25 search
-    # Tạm thời return empty list
+
+    if not query or not query.strip():
+        return []
+
+    _load_bm25_from_chroma()
+
     print("[retrieve_sparse] Chưa implement — Sprint 3")
     return []
 

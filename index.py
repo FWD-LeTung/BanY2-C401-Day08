@@ -265,11 +265,30 @@ def get_embedding(text: str) -> List[float]:
         model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
         return model.encode(text).tolist()
     """
-    raise NotImplementedError(
-        "TODO: Implement get_embedding().\n"
-        "Chọn Option A (OpenAI) hoặc Option B (Sentence Transformers) trong TODO comment."
-    )
 
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    
+    try: 
+        if provider == "openai":
+            from openai import OpenAI
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+            response = client.embeddings.create(
+                input=text,
+                model = embedding_model
+            )
+
+            return response.data[0].embedding
+        elif provider == "local":
+            from sentence_transformers import SentenceTransformer
+            model_name = os.getenv("LOCAL_EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+            model = SentenceTransformer(model_name)
+
+            return model.encode(text).tolist()
+    except Exception as e:
+        print(f"Lỗi khi tạo embedding: {e}")
+        return []  # Trả về embedding rỗng nếu có lỗi
 
 def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None:
     """
@@ -368,87 +387,6 @@ def build_index(docs_dir: Path = DOCS_DIR, db_dir: Path = CHROMA_DB_DIR) -> None
 # Dùng để debug và kiểm tra chất lượng index
 # =============================================================================
 
-def list_chunks(db_dir: Path = CHROMA_DB_DIR, n: int = 5) -> None:
-    """
-    In ra n chunk đầu tiên trong ChromaDB để kiểm tra chất lượng index.
-    """
-    try:
-        import chromadb
-        client = chromadb.PersistentClient(path=str(db_dir))
-        
-        # Lấy collection đã tạo từ bước build_index
-        collection = client.get_collection("rag_lab")
-        
-        # TỐI ƯU: Dùng peek() thay vì get() để xem lướt dữ liệu
-        results = collection.peek(limit=n)
-
-        print(f"\n=== Top {n} chunks trong Database ===\n")
-        
-        # Duyệt qua các list trong kết quả của peek()
-        for i in range(len(results["ids"])):
-            chunk_id = results["ids"][i]
-            doc = results["documents"][i]
-            meta = results["metadatas"][i]
-            
-            print(f"[Chunk {i+1}] ID: {chunk_id}")
-            print(f"  Source: {meta.get('source', 'N/A')}")
-            print(f"  Department: {meta.get('department', 'N/A')}") 
-            print(f"  Section: {meta.get('section', 'N/A')}")
-            print(f"  Effective Date: {meta.get('effective_date', 'N/A')}")
-            # Tăng số ký tự preview lên 150 để dễ đọc hiểu ngữ cảnh hơn
-            print(f"  Text preview: {doc[:150]}...\n")
-            
-    except Exception as e:
-        print(f"Lỗi khi đọc index: {e}")
-        print("Hãy đảm bảo bạn đã chạy build_index() trước.")
-
-def inspect_metadata_coverage(db_dir: Path = CHROMA_DB_DIR) -> None:
-    """
-    Kiểm tra phân phối metadata trong toàn bộ index.
-
-    Checklist Sprint 1:
-    - Mọi chunk đều có source?
-    - Có bao nhiêu chunk từ mỗi department?
-    - Chunk nào thiếu effective_date?
-
-    TODO: Implement sau khi build_index() hoàn thành.
-    """
-    try:
-        import chromadb
-        client = chromadb.PersistentClient(path=str(db_dir))
-        collection = client.get_collection("rag_lab")
-        results = collection.get(include=["metadatas"])
-
-        print(f"\nTổng chunks: {len(results['metadatas'])}")
-
-        # TODO: Phân tích metadata
-        # Đếm theo department, kiểm tra effective_date missing, v.v.
-        departments = {}
-        missing_date = 0
-        missing_source = 0
-
-        for meta in results["metadatas"]:
-            # Đếm theo department
-            dept = meta.get("department", "unknown")
-            departments[dept] = departments.get(dept, 0) + 1
-            
-            # Kiểm tra effective_date missing
-            if meta.get("effective_date") in ("unknown", "", None):
-                missing_date += 1
-                
-            # Kiểm tra source missing
-            if meta.get("source") in ("unknown", "", None):
-                missing_source += 1
-
-        print("Phân bố theo department:")
-        for dept, count in departments.items():
-            print(f"  - {dept}: {count} chunks")
-            
-        print(f"Chunks thiếu source: {missing_source}")
-        print(f"Chunks thiếu effective_date: {missing_date}")
-
-    except Exception as e:
-        print(f"Lỗi: {e}. Hãy chạy build_index() trước.")
 
 
 # =============================================================================
