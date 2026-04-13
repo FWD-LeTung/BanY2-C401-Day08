@@ -36,6 +36,7 @@ TOP_K_SEARCH = 10    # Số chunk lấy từ vector store trước rerank (searc
 TOP_K_SELECT = 3     # Số chunk gửi vào prompt sau rerank/select (top-3 sweet spot)
 
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+RERANK_MODEL = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 
 # =============================================================================
@@ -227,8 +228,8 @@ def retrieve_sparse(query: str, top_k: int = TOP_K_SEARCH) -> List[Dict[str, Any
 def retrieve_hybrid(
     query: str,
     top_k: int = TOP_K_SEARCH,
-    dense_weight: float = 0.6,
-    sparse_weight: float = 0.4,
+    dense_weight: float = 0.75,
+    sparse_weight: float = 0.25,
 ) -> List[Dict[str, Any]]:
     """
     Hybrid retrieval: kết hợp dense và sparse bằng Reciprocal Rank Fusion (RRF).
@@ -344,7 +345,7 @@ def rerank(
 
     if _rerank_model is None:
         from sentence_transformers import CrossEncoder
-        _rerank_model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        _rerank_model = CrossEncoder(RERANK_MODEL)
 
     pairs = [[query, chunk["text"]] for chunk in candidates]
     scores = _rerank_model.predict(pairs)

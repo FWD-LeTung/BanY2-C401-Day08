@@ -1,0 +1,312 @@
+============================================================
+Sprint 4: Evaluation & Scorecard
+============================================================
+
+======================================================================
+Dataset: test_questions
+======================================================================
+
+Loading test questions từ: G:\code_file\python\assignments\BanY2-C401-Day08\data\test_questions.json
+Tìm thấy 10 câu hỏi
+  [q01] SLA xử lý ticket P1 là bao lâu? (SLA)
+  [q02] Khách hàng có thể yêu cầu hoàn tiền trong bao nhiêu ngày? (Refund)
+  [q03] Ai phải phê duyệt để cấp quyền Level 3? (Access Control)
+  ...
+
+--- Chạy Baseline ---
+
+======================================================================
+Chạy scorecard: baseline_dense
+Config: {'retrieval_mode': 'dense', 'top_k_search': 10, 'top_k_select': 3, 'use_rerank': False, 'label': 'baseline_dense'}
+======================================================================
+
+[q01] SLA xử lý ticket P1 là bao lâu?
+  Answer: SLA xử lý ticket P1 là 4 giờ [1]....
+  Faithful: 3 | Relevant: 5 | Recall: 5 | Complete: 2
+
+[q02] Khách hàng có thể yêu cầu hoàn tiền trong bao nhiêu ngày?
+  Answer: Khách hàng có thể yêu cầu hoàn tiền trong vòng 7 ngày làm việc kể từ thời điểm xác nhận đơn hàng [1]...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q03] Ai phải phê duyệt để cấp quyền Level 3?
+  Answer: Để cấp quyền Level 3, cần sự phê duyệt của Line Manager, IT Admin, và IT Security [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q04] Sản phẩm kỹ thuật số có được hoàn tiền không?
+  Answer: Sản phẩm kỹ thuật số không được hoàn tiền [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q05] Tài khoản bị khóa sau bao nhiêu lần đăng nhập sai?
+  Answer: Tài khoản bị khóa sau 5 lần đăng nhập sai liên tiếp [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q06] Escalation trong sự cố P1 diễn ra như thế nào?
+  Answer: Escalation trong sự cố P1 diễn ra như sau: Nếu không có phản hồi trong 10 phút, sự cố sẽ tự động đượ...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q07] Approval Matrix để cấp quyền hệ thống là tài liệu nào?
+  Answer: Tôi không biết....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 1
+
+[q08] Nhân viên được làm remote tối đa mấy ngày mỗi tuần?
+  Answer: Nhân viên được làm remote tối đa 2 ngày mỗi tuần [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 4
+
+[q09] ERR-403-AUTH là lỗi gì và cách xử lý?
+  Answer: Tôi không biết....
+  Faithful: 5 | Relevant: 5 | Recall: None | Complete: 5
+
+[q10] Nếu cần hoàn tiền khẩn cấp cho khách hàng VIP, quy trình có khác không?
+  Answer: Tôi không biết....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+Average faithfulness: 4.80
+
+Average relevance: 5.00
+
+Average context_recall: 5.00
+
+Average completeness: 4.20
+
+Scorecard lưu tại: G:\code_file\python\assignments\BanY2-C401-Day08\results\test_questions\scorecard_baseline.md
+
+--- Chạy Variant ---
+
+======================================================================
+Chạy scorecard: variant_hybrid_rerank
+Config: {'retrieval_mode': 'hybrid', 'top_k_search': 20, 'top_k_select': 3, 'use_rerank': True, 'label': 'variant_hybrid_rerank'}
+======================================================================
+
+[q01] SLA xử lý ticket P1 là bao lâu?
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights: 100%|█████████████████████████████████████████████████████████████| 105/105 [00:00<00:00, 6451.55it/s]
+BertForSequenceClassification LOAD REPORT from: cross-encoder/ms-marco-MiniLM-L-6-v2
+Key                          | Status     |  |
+-----------------------------+------------+--+-
+bert.embeddings.position_ids | UNEXPECTED |  |
+
+Notes:
+- UNEXPECTED:   can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  Answer: SLA xử lý ticket P1 là 4 giờ [1]....
+  Faithful: 3 | Relevant: 5 | Recall: 5 | Complete: 2
+
+[q02] Khách hàng có thể yêu cầu hoàn tiền trong bao nhiêu ngày?
+  Answer: Khách hàng có thể yêu cầu hoàn tiền trong vòng 7 ngày làm việc kể từ thời điểm xác nhận đơn hàng [1]...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q03] Ai phải phê duyệt để cấp quyền Level 3?
+  Answer: Để cấp quyền Level 3, cần sự phê duyệt của Line Manager, IT Admin và IT Security [2]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q04] Sản phẩm kỹ thuật số có được hoàn tiền không?
+  Answer: Sản phẩm kỹ thuật số không được hoàn tiền [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 4
+
+[q05] Tài khoản bị khóa sau bao nhiêu lần đăng nhập sai?
+  Answer: Tài khoản bị khóa sau 5 lần đăng nhập sai liên tiếp [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q06] Escalation trong sự cố P1 diễn ra như thế nào?
+  Answer: Escalation trong sự cố P1 diễn ra tự động nếu không có phản hồi trong 10 phút, và sẽ được escalate l...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q07] Approval Matrix để cấp quyền hệ thống là tài liệu nào?
+  Answer: Tôi không biết....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[q08] Nhân viên được làm remote tối đa mấy ngày mỗi tuần?
+  Answer: Nhân viên được làm remote tối đa 2 ngày mỗi tuần [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 4
+
+[q09] ERR-403-AUTH là lỗi gì và cách xử lý?
+  Answer: Tôi không biết....
+  Faithful: 5 | Relevant: 5 | Recall: None | Complete: 5
+
+[q10] Nếu cần hoàn tiền khẩn cấp cho khách hàng VIP, quy trình có khác không?
+  Answer: Tôi không biết....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+Average faithfulness: 4.80
+
+Average relevance: 5.00
+
+Average context_recall: 5.00
+
+Average completeness: 4.50
+
+Scorecard lưu tại: G:\code_file\python\assignments\BanY2-C401-Day08\results\test_questions\scorecard_variant.md
+
+======================================================================
+A/B Comparison: Baseline vs Variant
+======================================================================
+Metric                 Baseline    Variant    Delta
+-------------------------------------------------------
+faithfulness               4.80       4.80    +0.00
+relevance                  5.00       5.00    +0.00
+context_recall             5.00       5.00    +0.00
+completeness               4.20       4.50    +0.30
+
+Câu    Baseline F/R/Rc/C      Variant F/R/Rc/C       Better?
+-----------------------------------------------------------------
+q01    3/5/5/2                3/5/5/2                Tie
+q02    5/5/5/5                5/5/5/5                Tie
+q03    5/5/5/5                5/5/5/5                Tie
+q04    5/5/5/5                5/5/5/4                Baseline
+q05    5/5/5/5                5/5/5/5                Tie
+q06    5/5/5/5                5/5/5/5                Tie
+q07    5/5/5/1                5/5/5/5                Variant
+q08    5/5/5/4                5/5/5/4                Tie
+q09    5/5/None/5             5/5/None/5             Tie
+q10    5/5/5/5                5/5/5/5                Tie
+
+Kết quả đã lưu vào: G:\code_file\python\assignments\BanY2-C401-Day08\results\test_questions\ab_comparison.csv
+
+======================================================================
+Dataset: grading_testing
+======================================================================
+
+Loading test questions từ: G:\code_file\python\assignments\BanY2-C401-Day08\data\grading_testing.json
+Tìm thấy 10 câu hỏi
+  [gq01] SLA xử lý ticket P1 đã thay đổi như thế nào so với phiên bản trước? (SLA)
+  [gq02] Khi làm việc remote, tôi phải dùng VPN và được kết nối trên tối đa bao nhiêu thiết bị? (Cross-Document)
+  [gq03] Đơn hàng mua trong chương trình Flash Sale và đã kích hoạt sản phẩm có được hoàn tiền không? (Refund)
+  ...
+
+--- Chạy Baseline ---
+
+======================================================================
+Chạy scorecard: baseline_dense
+Config: {'retrieval_mode': 'dense', 'top_k_search': 10, 'top_k_select': 3, 'use_rerank': False, 'label': 'baseline_dense'}
+======================================================================
+
+[gq01] SLA xử lý ticket P1 đã thay đổi như thế nào so với phiên bản trước?
+  Answer: SLA xử lý ticket P1 đã thay đổi từ 6 giờ xuống còn 4 giờ trong phiên bản v2026.1 [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 3
+
+[gq02] Khi làm việc remote, tôi phải dùng VPN và được kết nối trên tối đa bao nhiêu thiết bị?
+  Answer: Khi làm việc remote, bạn phải dùng VPN và được kết nối trên tối đa 2 thiết bị cùng lúc [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 4
+
+[gq03] Đơn hàng mua trong chương trình Flash Sale và đã kích hoạt sản phẩm có được hoàn tiền không?
+  Answer: Đơn hàng mua trong chương trình Flash Sale và đã kích hoạt sản phẩm không được hoàn tiền [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 4
+
+[gq04] Nếu chọn nhận store credit thay vì hoàn tiền, tôi được bao nhiêu phần trăm so với số tiền gốc?
+  Answer: Nếu chọn nhận store credit thay vì hoàn tiền, bạn sẽ nhận được 110% so với số tiền gốc [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[gq05] Contractor từ bên ngoài công ty có thể được cấp quyền Admin Access không? Nếu có, cần bao nhiêu ngày và có yêu cầu đặc biệt gì?
+  Answer: Contractor từ bên ngoài công ty có thể được cấp quyền Admin Access, nhưng cần phải được phê duyệt bở...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[gq06] Lúc 2 giờ sáng xảy ra sự cố P1, on-call engineer cần cấp quyền tạm thời cho một engineer xử lý incident. Quy trình cụ thể như thế nào và quyền này tồn tại bao lâu?
+  Answer: Trong trường hợp sự cố P1, on-call engineer cần cấp quyền tạm thời cho một engineer xử lý incident, ...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 4
+
+[gq07] Công ty sẽ phạt bao nhiêu nếu team IT vi phạm cam kết SLA P1?
+  Answer: Tôi không biết....
+  Faithful: 5 | Relevant: 5 | Recall: None | Complete: 5
+
+[gq08] Nhân viên phải báo trước bao nhiêu ngày để xin nghỉ phép năm? Con số này có giống với số ngày cần giấy tờ khi nghỉ ốm không?
+  Answer: Nhân viên phải báo trước ít nhất 3 ngày làm việc để xin nghỉ phép năm [2]. Con số này không giống vớ...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 4
+
+[gq09] Mật khẩu tài khoản công ty cần đổi định kỳ không? Nếu có, hệ thống sẽ nhắc nhở trước bao nhiêu ngày và đổi qua đâu?
+  Answer: Có, mật khẩu phải được thay đổi mỗi 90 ngày. Hệ thống sẽ nhắc nhở 7 ngày trước khi hết hạn [1]....
+  Faithful: 4 | Relevant: 5 | Recall: 5 | Complete: 3
+
+[gq10] Chính sách hoàn tiền hiện tại áp dụng cho đơn hàng đặt trước ngày 01/02/2026 không?
+  Answer: Chính sách hoàn tiền hiện tại không áp dụng cho đơn hàng đặt trước ngày 01/02/2026. Các đơn hàng này...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+Average faithfulness: 4.90
+
+Average relevance: 5.00
+
+Average context_recall: 5.00
+
+Average completeness: 4.20
+
+Scorecard lưu tại: G:\code_file\python\assignments\BanY2-C401-Day08\results\grading_testing\scorecard_baseline.md
+
+--- Chạy Variant ---
+
+======================================================================
+Chạy scorecard: variant_hybrid_rerank
+Config: {'retrieval_mode': 'hybrid', 'top_k_search': 20, 'top_k_select': 3, 'use_rerank': True, 'label': 'variant_hybrid_rerank'}
+======================================================================
+
+[gq01] SLA xử lý ticket P1 đã thay đổi như thế nào so với phiên bản trước?
+  Answer: SLA xử lý ticket P1 đã thay đổi từ 6 giờ xuống còn 4 giờ trong phiên bản v2026.1 [2]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 4
+
+[gq02] Khi làm việc remote, tôi phải dùng VPN và được kết nối trên tối đa bao nhiêu thiết bị?
+  Answer: Khi làm việc remote, bạn phải dùng VPN và được kết nối trên tối đa 2 thiết bị cùng lúc [2]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 3
+
+[gq03] Đơn hàng mua trong chương trình Flash Sale và đã kích hoạt sản phẩm có được hoàn tiền không?
+  Answer: Đơn hàng mua trong chương trình Flash Sale và đã kích hoạt sản phẩm không được hoàn tiền [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 3
+
+[gq04] Nếu chọn nhận store credit thay vì hoàn tiền, tôi được bao nhiêu phần trăm so với số tiền gốc?
+  Answer: Nếu chọn nhận store credit thay vì hoàn tiền, bạn sẽ nhận được 110% so với số tiền gốc [1]....
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 4
+
+[gq05] Contractor từ bên ngoài công ty có thể được cấp quyền Admin Access không? Nếu có, cần bao nhiêu ngày và có yêu cầu đặc biệt gì?
+  Answer: Tôi không biết....
+  Faithful: 1 | Relevant: 1 | Recall: 5 | Complete: 1
+
+[gq06] Lúc 2 giờ sáng xảy ra sự cố P1, on-call engineer cần cấp quyền tạm thời cho một engineer xử lý incident. Quy trình cụ thể như thế nào và quyền này tồn tại bao lâu?
+  Answer: Trong trường hợp sự cố P1, on-call engineer cần cấp quyền tạm thời cho một engineer xử lý incident, ...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[gq07] Công ty sẽ phạt bao nhiêu nếu team IT vi phạm cam kết SLA P1?
+  Answer: Tôi không biết....
+  Faithful: 5 | Relevant: 5 | Recall: None | Complete: 5
+
+[gq08] Nhân viên phải báo trước bao nhiêu ngày để xin nghỉ phép năm? Con số này có giống với số ngày cần giấy tờ khi nghỉ ốm không?
+  Answer: Nhân viên phải báo trước ít nhất 3 ngày làm việc để xin nghỉ phép năm [2]. Con số này không giống vớ...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+[gq09] Mật khẩu tài khoản công ty cần đổi định kỳ không? Nếu có, hệ thống sẽ nhắc nhở trước bao nhiêu ngày và đổi qua đâu?
+  Answer: Có, mật khẩu tài khoản công ty cần được thay đổi định kỳ mỗi 90 ngày. Hệ thống sẽ nhắc nhở 7 ngày tr...
+  Faithful: 4 | Relevant: 5 | Recall: 5 | Complete: 3
+
+[gq10] Chính sách hoàn tiền hiện tại áp dụng cho đơn hàng đặt trước ngày 01/02/2026 không?
+  Answer: Chính sách hoàn tiền hiện tại không áp dụng cho đơn hàng đặt trước ngày 01/02/2026. Các đơn hàng này...
+  Faithful: 5 | Relevant: 5 | Recall: 5 | Complete: 5
+
+Average faithfulness: 4.50
+
+Average relevance: 4.60
+
+Average context_recall: 5.00
+
+Average completeness: 3.80
+
+Scorecard lưu tại: G:\code_file\python\assignments\BanY2-C401-Day08\results\grading_testing\scorecard_variant.md
+
+======================================================================
+A/B Comparison: Baseline vs Variant
+======================================================================
+Metric                 Baseline    Variant    Delta
+-------------------------------------------------------
+faithfulness               4.90       4.50    -0.40
+relevance                  5.00       4.60    -0.40
+context_recall             5.00       5.00    +0.00
+completeness               4.20       3.80    -0.40
+
+Câu    Baseline F/R/Rc/C      Variant F/R/Rc/C       Better?
+-----------------------------------------------------------------
+gq01   5/5/5/3                5/5/5/4                Variant
+gq02   5/5/5/4                5/5/5/3                Baseline
+gq03   5/5/5/4                5/5/5/3                Baseline
+gq04   5/5/5/5                5/5/5/4                Baseline
+gq05   5/5/5/5                1/1/5/1                Baseline
+gq06   5/5/5/4                5/5/5/5                Variant
+gq07   5/5/None/5             5/5/None/5             Tie
+gq08   5/5/5/4                5/5/5/5                Variant
+gq09   4/5/5/3                4/5/5/3                Tie
+gq10   5/5/5/5                5/5/5/5                Tie
+
+Kết quả đã lưu vào: G:\code_file\python\assignments\BanY2-C401-Day08\results\grading_testing\ab_comparison.csv
